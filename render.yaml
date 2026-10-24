@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: spectrum-attendance
+    name: spectrum-attendance-bot
     env: docker
     plan: free
     region: singapore
@@ -11,9 +11,7 @@ services:
         sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
-      - key: UM_EMAIL
-        sync: false
-      - key: UM_PASSWORD
+      - key: MOODLE_SESSION
         sync: false
       - key: HEADLESS_ONLY
         value: "1"
