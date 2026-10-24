@@ -52,6 +52,16 @@ USER_AGENT = (
 )
 
 load_dotenv(os.path.join(BASE_DIR, ".env"))
+SPECTRUM_BASE_URL = os.environ.get("SPECTRUM_BASE_URL", "https://spectrum.um.edu.my").rstrip("/")
+
+
+def normalize_spectrum_url(url: str) -> str:
+    """Replaces spectrum.um.edu.my with SPECTRUM_BASE_URL if custom proxy is configured."""
+    if not url:
+        return SPECTRUM_BASE_URL
+    if SPECTRUM_BASE_URL != "https://spectrum.um.edu.my" and "spectrum.um.edu.my" in url:
+        return url.replace("https://spectrum.um.edu.my", SPECTRUM_BASE_URL).replace("http://spectrum.um.edu.my", SPECTRUM_BASE_URL)
+    return url
 
 
 def log(msg: str):
@@ -142,8 +152,13 @@ def build_http_session(cookies_dict: dict = None) -> requests.Session:
     s = requests.Session()
     s.headers.update({"User-Agent": USER_AGENT})
     cookies = cookies_dict if cookies_dict is not None else load_cookies()
-    for k, v in cookies.items():
-        s.cookies.set(k, v, domain="spectrum.um.edu.my")
+    parsed_base = urlparse(SPECTRUM_BASE_URL)
+    domains = {"spectrum.um.edu.my"}
+    if parsed_base.netloc:
+        domains.add(parsed_base.netloc.split(":")[0])
+    for d in domains:
+        for k, v in cookies.items():
+            s.cookies.set(k, v, domain=d)
     return s
 
 
@@ -154,9 +169,11 @@ def is_authenticated_html(url: str, html_text: str) -> bool:
         return False
     if "/login/" in parsed.path or "/auth/oidc/" in parsed.path:
         return False
-    if "Log in to the site" in html_text or 'href="https://spectrum.um.edu.my/login/index.php"' in html_text:
+    if "Log in to the site" in html_text or 'href="https://spectrum.um.edu.my/login/index.php"' in html_text or "/login/index.php" in html_text:
         return False
-    return "spectrum.um.edu.my" in parsed.netloc
+    parsed_base = urlparse(SPECTRUM_BASE_URL)
+    allowed_domains = {"spectrum.um.edu.my", parsed_base.netloc.split(":")[0]}
+    return parsed.netloc in allowed_domains
 
 
 def _create_chrome_driver(headless: bool = True):
@@ -518,7 +535,7 @@ def parse_attendance_view(html_text: str, base_url: str, course_id: str = "") ->
         href = a["href"]
         text = a.get_text(" ", strip=True)
         if "mod/attendance/attendance.php" in href or "submit attendance" in text.lower() or "hantar kehadiran" in text.lower():
-            full_url = urljoin(base_url, href)
+            full_url = normalize_spectrum_url(urljoin(base_url, href))
             tr = a.find_parent("tr")
             row_text = tr.get_text(" | ", strip=True) if tr else text
             submit_links.append({
@@ -576,6 +593,7 @@ def submit_attendance_form(
     Visits the Moodle attendance.php URL and submits the form with 'Present' selected.
     If a password is required and not provided, saves pending state and returns False with PASSWORD_REQUIRED.
     """
+    submit_url = normalize_spectrum_url(submit_url)
     log(f"🚀 Opening attendance submission link: {submit_url}")
     resp = session.get(submit_url, allow_redirects=True, timeout=20)
 
@@ -598,7 +616,7 @@ def submit_attendance_form(
         alert_text = alert.get_text(" ", strip=True) if alert else "No attendance form found on page."
         return False, alert_text
 
-    action_url = urljoin(resp.url, target_form.get("action") or submit_url)
+    action_url = normalize_spectrum_url(urljoin(resp.url, target_form.get("action") or submit_url))
     payload = {}
 
     for inp in target_form.find_all("input"):
@@ -697,7 +715,7 @@ def check_and_submit_course(course: dict, password: str = None, force_interactiv
     Checks a single course's attendance page, refreshes login if needed, and submits attendance if open.
     Returns dict with keys: status ('submitted', 'password_required', 'already_taken_or_closed', 'auth_failed', 'error'), message
     """
-    url = course["url"]
+    url = normalize_spectrum_url(course["url"])
     name = course.get("name", url)
     preferred_label = course.get("status_label", "Present")
 
@@ -817,7 +835,7 @@ def fetch_weekly_sessions(course: dict) -> list[str]:
     Fetches the attendance sessions scheduled for the entire current week.
     Uses view=2 (Weeks) or filters view=5.
     """
-    base_url = course["url"]
+    base_url = normalize_spectrum_url(course["url"])
     sep = "&" if "?" in base_url else "?"
     weekly_url = f"{base_url}{sep}view=2"
 
@@ -878,7 +896,7 @@ def get_full_status(force_refresh: bool = False) -> dict:
     if cookies:
         session = build_http_session(cookies)
         try:
-            test_resp = session.get("https://spectrum.um.edu.my/my/", allow_redirects=True, timeout=10)
+            test_resp = session.get(normalize_spectrum_url("https://spectrum.um.edu.my/my/"), allow_redirects=True, timeout=10)
             authenticated = is_authenticated_html(test_resp.url, test_resp.text)
         except Exception:
             authenticated = False
@@ -888,7 +906,7 @@ def get_full_status(force_refresh: bool = False) -> dict:
         cid = extract_course_id(c)
         cname = c.get("name", f"Course {cid}")
         sched_str = format_schedule_string(c.get("schedule", []))
-        url = c["url"]
+        url = normalize_spectrum_url(c["url"])
 
         stats = {
             "taken_sessions": 0,
@@ -1042,7 +1060,7 @@ def authenticate_sso(
     """
     cfg = load_config()
     courses = cfg.get("courses", [])
-    url = target_url or (courses[0]["url"] if courses else "https://spectrum.um.edu.my/my/")
+    url = normalize_spectrum_url(target_url or (courses[0]["url"] if courses else "https://spectrum.um.edu.my/my/"))
 
     log(f"🔐 authenticate_sso called for URL: {url} (email provided: {bool(email)})")
 
