@@ -119,14 +119,19 @@ def save_cookies(cookies_dict: dict):
 
 
 def load_cookies() -> dict:
-    if not os.path.exists(COOKIE_FILE):
-        return {}
-    try:
-        with open(COOKIE_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data.get("cookies", {})
-    except Exception:
-        return {}
+    if os.path.exists(COOKIE_FILE):
+        try:
+            with open(COOKIE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                cookies = data.get("cookies", {})
+                if cookies:
+                    return cookies
+        except Exception:
+            pass
+    env_sess = os.environ.get("MOODLE_SESSION", "").strip()
+    if env_sess:
+        return {"MoodleSession": env_sess}
+    return {}
 
 
 def build_http_session(cookies_dict: dict = None) -> requests.Session:
