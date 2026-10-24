@@ -52,6 +52,7 @@ class PasswordPayload(BaseModel):
 class LoginPayload(BaseModel):
     email: Optional[str] = None
     password: Optional[str] = None
+    cookies: Optional[dict] = None
     save_credentials: bool = True
     force: bool = False
 
@@ -446,6 +447,16 @@ async def login_microsoft_sso(payload: Optional[LoginPayload] = None):
     Protected by asyncio.Lock to prevent concurrent browser runs on memory-constrained hosts.
     """
     req_payload = payload or LoginPayload()
+
+    if req_payload.cookies:
+        attendance.save_cookies(req_payload.cookies)
+        invalidate_status_cache()
+        return {
+            "status": "success",
+            "success": True,
+            "authenticated": True,
+            "message": "Session cookies synced to cloud server.",
+        }
 
     # Guard: avoid concurrent Chrome processes on 512MB RAM
     selenium_lock: asyncio.Lock = get_loop_bound_lock("selenium_lock")

@@ -130,7 +130,11 @@ def load_cookies() -> dict:
             pass
     env_sess = os.environ.get("MOODLE_SESSION", "").strip()
     if env_sess:
-        return {"MoodleSession": env_sess}
+        cookies = {"MoodleSession": env_sess}
+        env_cs1 = os.environ.get("COOKIESESSION1", "678B28C54C272EA66C4BF98F4CFDDA60").strip()
+        if env_cs1:
+            cookies["cookiesession1"] = env_cs1
+        return cookies
     return {}
 
 
