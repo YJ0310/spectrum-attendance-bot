@@ -1,0 +1,15 @@
+[Unit]
+Description=24/7 SPeCTRUM Auto-Attendance Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/spectrum
+EnvironmentFile=/opt/spectrum/.env
+ExecStart=/usr/bin/python3 /opt/spectrum/bot_daemon.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

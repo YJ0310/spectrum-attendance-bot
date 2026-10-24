@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  spectrum-service:
+    build: .
+    container_name: spectrum_attendance_service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - PORT=8000
+    volumes:
+      # Persist cookies, login sessions, and logs across container updates
+      - ./data:/root/.config/spectrum
+      - ./config.json:/app/config.json
+    shm_size: '512mb'

@@ -1,0 +1,42 @@
+{
+  "courses": [
+    {
+      "name": "WIA2006 Lecture (DK1)",
+      "url": "https://spectrum.um.edu.my/mod/attendance/view.php?id=1121957",
+      "status_label": "Present",
+      "schedule": [
+        {
+          "day": "Thu",
+          "hour": 16,
+          "minute": 0
+        }
+      ]
+    },
+    {
+      "name": "WIA2006 Tutorial (OCC3)",
+      "url": "https://spectrum.um.edu.my/mod/attendance/view.php?id=893285",
+      "status_label": "Present",
+      "schedule": [
+        {
+          "day": "Tue",
+          "hour": 10,
+          "minute": 0
+        }
+      ]
+    },
+    {
+      "name": "SIF4001 Project (Daily Attendance)",
+      "url": "https://spectrum.um.edu.my/mod/attendance/view.php?id=1120381",
+      "status_label": "Present",
+      "schedule": [
+        { "day": "Mon", "hour": 10, "minute": 0 },
+        { "day": "Tue", "hour": 10, "minute": 0 },
+        { "day": "Wed", "hour": 10, "minute": 0 },
+        { "day": "Thu", "hour": 10, "minute": 0 },
+        { "day": "Fri", "hour": 10, "minute": 0 }
+      ]
+    }
+  ],
+  "poll_interval_seconds": 60,
+  "watch_timeout_minutes": 120
+}

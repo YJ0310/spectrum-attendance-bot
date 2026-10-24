@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: spectrum-attendance
+    env: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: UM_EMAIL
+        sync: false
+      - key: UM_PASSWORD
+        sync: false
+      - key: HEADLESS_ONLY
+        value: "1"
+      - key: TZ
+        value: "Asia/Kuala_Lumpur"
+      - key: PORT
+        value: "8000"

@@ -1,0 +1,14 @@
+.env
+cookies.json
+pending_password.json
+data/
+__pycache__/
+*.pyc
+*.log
+.DS_Store
+chrome_profile/
+.agents/
+ORIGINAL_REQUEST.md
+PROJECT.md
+TEST_INFRA.md
+TEST_READY.md
