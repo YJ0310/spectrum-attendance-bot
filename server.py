@@ -60,6 +60,22 @@ class LoginPayload(BaseModel):
 # FastAPI Lifespan Handler
 # ---------------------------------------------------------------------------
 
+async def run_keep_alive_pinger(stop_event: asyncio.Event):
+    """Pings external Render URL every 10 minutes to prevent free tier spin-down."""
+    import urllib.request
+    external_url = os.environ.get("RENDER_EXTERNAL_URL", "https://spectrum-attendance-bot.onrender.com").rstrip("/")
+    health_url = f"{external_url}/health"
+    while not stop_event.is_set():
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=600)
+            break
+        except asyncio.TimeoutError:
+            try:
+                await asyncio.to_thread(urllib.request.urlopen, health_url, timeout=10)
+            except Exception:
+                pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -67,6 +83,7 @@ async def lifespan(app: FastAPI):
       1. Initializes shared concurrency lock for Chromium.
       2. Spawns non-blocking Telegram Bot polling daemon (httpx).
       3. Spawns scheduled class-time watcher.
+      4. Spawns external keep-alive pinger.
     """
     app.state.start_time = time.time()
     app.state.selenium_lock = asyncio.Lock()
@@ -77,6 +94,7 @@ async def lifespan(app: FastAPI):
 
     bot_task = None
     watcher_task = None
+    pinger_task = None
 
     # Spawn async Telegram listener if configured and not explicitly disabled
     if os.environ.get("ENABLE_BOT_DAEMON", "1").lower() not in ("0", "false"):
@@ -91,13 +109,16 @@ async def lifespan(app: FastAPI):
         watcher_task = asyncio.create_task(bot_daemon.run_async_class_watcher(stop_event))
         attendance.log("⏰ Lifespan: Async class-time watcher spawned.")
 
+    if os.environ.get("ENABLE_KEEP_ALIVE", "1").lower() not in ("0", "false"):
+        pinger_task = asyncio.create_task(run_keep_alive_pinger(stop_event))
+
     yield
 
     # Shutdown sequence
     attendance.log("🛑 Lifespan: Initiating cooperative background worker shutdown...")
     stop_event.set()
 
-    tasks_to_cancel = [t for t in (bot_task, watcher_task) if t is not None]
+    tasks_to_cancel = [t for t in (bot_task, watcher_task, pinger_task) if t is not None]
     for task in tasks_to_cancel:
         task.cancel()
 
