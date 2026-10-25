@@ -152,6 +152,9 @@ def build_http_session(cookies_dict: dict = None) -> requests.Session:
     s = requests.Session()
     s.headers.update({"User-Agent": USER_AGENT})
     cookies = cookies_dict if cookies_dict is not None else load_cookies()
+    # Set cookies unconditionally on the session without domain restrictions so requests attaches them to proxy hosts
+    for k, v in cookies.items():
+        s.cookies.set(k, v)
     parsed_base = urlparse(SPECTRUM_BASE_URL)
     domains = {"spectrum.um.edu.my"}
     if parsed_base.netloc:
@@ -169,11 +172,12 @@ def is_authenticated_html(url: str, html_text: str) -> bool:
         return False
     if "/login/" in parsed.path or "/auth/oidc/" in parsed.path:
         return False
-    if "Log in to the site" in html_text or 'href="https://spectrum.um.edu.my/login/index.php"' in html_text or "/login/index.php" in html_text:
+    if "Log in to the site" in html_text or 'href="https://spectrum.um.edu.my/login/index.php"' in html_text:
         return False
-    parsed_base = urlparse(SPECTRUM_BASE_URL)
-    allowed_domains = {"spectrum.um.edu.my", parsed_base.netloc.split(":")[0]}
-    return parsed.netloc in allowed_domains
+    # Fail if login form is present
+    if 'name="username"' in html_text and 'name="password"' in html_text and '<form' in html_text:
+        return False
+    return True
 
 
 def _create_chrome_driver(headless: bool = True):
