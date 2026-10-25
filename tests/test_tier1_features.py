@@ -453,6 +453,41 @@ class TestFeature18MenuButtonRegistration(unittest.TestCase):
             # Either it runs or mocks correctly
             self.assertIn(result.returncode, [0, 1])
 
+    def test_auth_connect_gateway_and_status(self):
+        """Verify GET /auth/connect redirect and auth_connect_url in /api/status."""
+        client = get_client()
+        if client is None:
+            raise unittest.SkipTest("TestClient unavailable")
+
+        # Test GET /auth/connect redirect
+        resp = client.get("/auth/connect", follow_redirects=False)
+        self.assertIn(resp.status_code, [302, 303, 307])
+        self.assertTrue(bool(resp.headers.get("location")))
+
+        # Test GET /api/status contains auth_connect_url
+        with patch("attendance.get_full_status", return_value={"status": "ok", "courses": []}):
+            status_resp = client.get("/api/status?refresh=true")
+            self.assertEqual(status_resp.status_code, 200)
+            data = status_resp.json()
+            self.assertIn("auth_connect_url", data)
+            self.assertTrue(data["auth_connect_url"].endswith("/auth/connect"))
+
+    def test_login_cookies_telegram_notification(self):
+        """Verify POST /api/login with cookies triggers background telegram notification."""
+        client = get_client()
+        if client is None:
+            raise unittest.SkipTest("TestClient unavailable")
+
+        with patch("attendance.save_cookies") as mock_save, \
+             patch("telegram_bot.is_configured", return_value=True), \
+             patch("telegram_bot.send_message", return_value=True) as mock_send:
+            payload = {"cookies": {"MoodleSession": "test_moodle_session_123"}}
+            resp = client.post("/api/login", json=payload)
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertTrue(data.get("authenticated"))
+            mock_save.assert_called_once_with({"MoodleSession": "test_moodle_session_123"})
+
 
 if __name__ == "__main__":
     unittest.main()

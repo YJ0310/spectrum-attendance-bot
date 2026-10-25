@@ -90,6 +90,8 @@
   const state = {
     courses: [...DEFAULT_COURSES],
     authenticated: false,
+    authConnectUrl: null,
+    ssoPollTimer: null,
     lastChecked: null,
     isChecking: false,
     isSubmittingPassword: false,
@@ -499,6 +501,9 @@
         state.courses = data.courses;
       }
       state.authenticated = Boolean(data.authenticated);
+      if (data.auth_connect_url) {
+        state.authConnectUrl = data.auth_connect_url;
+      }
 
       // Update UI badges
       if (connectionStatusEl) {
@@ -706,6 +711,53 @@
   }
 
   // --------------------------------------------------------------------------
+  // 1-Tap SPeCTRUM SSO Gateway
+  // --------------------------------------------------------------------------
+  function connectWithSso() {
+    const authUrl = state.authConnectUrl || '/auth/connect';
+    showToast('Opening SPeCTRUM SSO in browser...', 'info');
+
+    const tg = getTg();
+    if (tg && typeof tg.openLink === 'function') {
+      try {
+        tg.openLink(authUrl);
+      } catch (e) {
+        window.open(authUrl, '_blank');
+      }
+    } else {
+      window.open(authUrl, '_blank');
+    }
+
+    // Start aggressive polling to detect when the session connects in background
+    let attempts = 0;
+    const maxAttempts = 24; // 24 * 2.5s = 60s
+    if (state.ssoPollTimer) clearInterval(state.ssoPollTimer);
+
+    state.ssoPollTimer = setInterval(async () => {
+      attempts++;
+      if (attempts > maxAttempts || state.authenticated) {
+        clearInterval(state.ssoPollTimer);
+        state.ssoPollTimer = null;
+        return;
+      }
+      try {
+        const res = await fetch('/api/status?refresh=true', { cache: 'no-store' });
+        if (res.ok) {
+          const d = await res.json();
+          if (d.authenticated) {
+            clearInterval(state.ssoPollTimer);
+            state.ssoPollTimer = null;
+            showToast('🎉 SPeCTRUM Cloud Session Connected!', 'success');
+            fetchAttendanceStatus();
+          }
+        }
+      } catch (e) {
+        // ignore polling network errors
+      }
+    }, 2500);
+  }
+
+  // --------------------------------------------------------------------------
   // Native In-App Login Card
   // --------------------------------------------------------------------------
   async function submitLogin() {
@@ -846,6 +898,10 @@
         }
       });
     }
+
+    // 1-Tap SSO Button Event
+    const ssoBtn = document.getElementById('ssoConnectBtn');
+    if (ssoBtn) ssoBtn.addEventListener('click', connectWithSso);
 
     // Login Form Events
     const loginForm = document.getElementById('loginForm');

@@ -24,7 +24,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 import attendance
@@ -332,10 +332,13 @@ async def get_attendance_status(refresh: bool = False):
     """
     now = time.time()
     cache = getattr(app.state, "status_cache", {"data": None, "timestamp": 0.0})
+    base_url = attendance.SPECTRUM_BASE_URL.rstrip("/")
+    auth_url = f"{base_url}/auth/connect"
 
     if not refresh and cache.get("data") and (now - cache.get("timestamp", 0.0) < 60.0):
         cached_data = dict(cache["data"])
         cached_data["cached"] = True
+        cached_data["auth_connect_url"] = auth_url
         return cached_data
 
     status_lock: asyncio.Lock = get_loop_bound_lock("status_lock")
@@ -346,14 +349,28 @@ async def get_attendance_status(refresh: bool = False):
         if not refresh and cache.get("data") and (now - cache.get("timestamp", 0.0) < 60.0):
             cached_data = dict(cache["data"])
             cached_data["cached"] = True
+            cached_data["auth_connect_url"] = auth_url
             return cached_data
 
         # Offload blocking HTTP scraping calls to threadpool
         status_data = await asyncio.to_thread(attendance.get_full_status, force_refresh=refresh)
         status_data["cached"] = False
+        status_data["auth_connect_url"] = auth_url
 
         app.state.status_cache = {"data": status_data, "timestamp": now}
         return status_data
+
+
+@app.get("/auth/connect")
+async def auth_connect_gateway():
+    """
+    Gateway for 1-tap SSO authentication.
+    Redirects to Cloudflare proxy's /auth/connect if configured, or directly to SPeCTRUM login.
+    """
+    base_url = attendance.SPECTRUM_BASE_URL.rstrip("/")
+    if "spectrum.um.edu.my" not in base_url and not base_url.startswith("http://127.0.0.1"):
+        return RedirectResponse(f"{base_url}/auth/connect", status_code=302)
+    return RedirectResponse("https://spectrum.um.edu.my/login/index.php?sso_sync=1", status_code=302)
 
 
 @app.post("/api/check")
@@ -451,6 +468,15 @@ async def login_microsoft_sso(payload: Optional[LoginPayload] = None):
     if req_payload.cookies:
         attendance.save_cookies(req_payload.cookies)
         invalidate_status_cache()
+
+        if telegram_bot.is_configured():
+            msg = (
+                "🎉 <b>SPeCTRUM Session Connected!</b>\n\n"
+                "Your login session has been successfully synced to the cloud bot.\n"
+                "Automated 24/7 attendance tracking is now active! 🚀"
+            )
+            asyncio.create_task(asyncio.to_thread(telegram_bot.send_message, msg))
+
         return {
             "status": "success",
             "success": True,
