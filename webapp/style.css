@@ -912,6 +912,8 @@ body {
   color: #ffffff;
   font-size: 15px;
   font-weight: 700;
+  text-decoration: none;
+  justify-content: center;
   box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }

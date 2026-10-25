@@ -503,6 +503,8 @@
       state.authenticated = Boolean(data.authenticated);
       if (data.auth_connect_url) {
         state.authConnectUrl = data.auth_connect_url;
+        const ssoBtn = document.getElementById('ssoConnectBtn');
+        if (ssoBtn) ssoBtn.href = data.auth_connect_url;
       }
 
       // Update UI badges
@@ -713,24 +715,31 @@
   // --------------------------------------------------------------------------
   // 1-Tap SPeCTRUM SSO Gateway
   // --------------------------------------------------------------------------
-  function connectWithSso() {
-    const authUrl = state.authConnectUrl || '/auth/connect';
+  function connectWithSso(e) {
+    const rawUrl = state.authConnectUrl || 'https://spectrum-proxy.yinjiasek.workers.dev/auth/connect';
+    const authUrl = rawUrl.startsWith('http') ? rawUrl : (window.location.origin + rawUrl);
+    console.log('[SPeCTRUM SSO] Launching SSO target:', authUrl);
     showToast('Opening SPeCTRUM SSO in browser...', 'info');
 
     const tg = getTg();
+    let openedViaTg = false;
     if (tg && typeof tg.openLink === 'function') {
       try {
         tg.openLink(authUrl);
-      } catch (e) {
-        window.open(authUrl, '_blank');
+        openedViaTg = true;
+        if (e) e.preventDefault();
+      } catch (err) {
+        console.warn('tg.openLink failed:', err);
       }
-    } else {
+    }
+
+    if (!openedViaTg && e && e.target && e.target.tagName !== 'A') {
       window.open(authUrl, '_blank');
     }
 
     // Start aggressive polling to detect when the session connects in background
     let attempts = 0;
-    const maxAttempts = 24; // 24 * 2.5s = 60s
+    const maxAttempts = 30; // 30 * 2s = 60s
     if (state.ssoPollTimer) clearInterval(state.ssoPollTimer);
 
     state.ssoPollTimer = setInterval(async () => {
@@ -754,7 +763,7 @@
       } catch (e) {
         // ignore polling network errors
       }
-    }, 2500);
+    }, 2000);
   }
 
   // --------------------------------------------------------------------------
