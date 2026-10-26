@@ -546,11 +546,6 @@
           sessionStatusBadge.textContent = 'Direct Mode Ready';
         }
       }
-        } else {
-          sessionStatusBadge.className = 'session-badge badge-warning';
-          sessionStatusBadge.textContent = 'Session Inactive';
-        }
-      }
 
       // Render Cards and Timeline
       renderCourseCards();
@@ -647,11 +642,6 @@
       if (icon) icon.classList.remove('hidden');
       if (btnText) btnText.textContent = 'Check Attendance Now';
     }, 2000);
-  }
-      if (icon) icon.classList.remove('hidden');
-      if (btnText) btnText.textContent = 'Check Attendance Now';
-      if (heroStatusText) heroStatusText.textContent = 'Automated SPeCTRUM Bot Ready';
-    }
   }
 
   // --------------------------------------------------------------------------
@@ -967,13 +957,19 @@
     }, 60000);
   }
 
-  // DOMContentLoaded Initialization
-  document.addEventListener('DOMContentLoaded', () => {
+  // Application Initialization (Safe for both dynamic and static loading)
+  function startApp() {
     initTelegram();
     renderCourseCards();
     renderWeeklyTimeline();
     setupEventListeners();
     fetchAttendanceStatus();
-  });
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    startApp();
+  } else {
+    document.addEventListener('DOMContentLoaded', startApp);
+  }
 
 })();
