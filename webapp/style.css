@@ -695,6 +695,37 @@ body {
   color: var(--text-main);
 }
 
+.course-card-actions {
+  margin-top: 6px;
+}
+
+.btn-open-course {
+  font-size: 13px;
+  min-height: 38px;
+  padding: 8px 12px;
+  background-color: rgba(37, 99, 235, 0.08);
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  color: var(--color-primary);
+  border-radius: var(--btn-radius);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.btn-open-course:hover {
+  background-color: var(--color-primary);
+  color: #ffffff;
+}
+
+.btn-open-course:active {
+  transform: scale(0.98);
+}
+
 /* --------------------------------------------------------------------------
    Weekly Schedule Timeline
    -------------------------------------------------------------------------- */

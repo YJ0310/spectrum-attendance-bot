@@ -329,6 +329,17 @@
               <span class="stat-value">${takenSessions}</span>
             </div>
           </div>
+
+          <!-- Direct 1-Tap Attendance Check Action -->
+          <div class="course-card-actions">
+            <a href="https://spectrum.um.edu.my/mod/attendance/view.php?id=${encodeURIComponent(course.course_id)}" 
+               target="_blank" 
+               class="btn-open-course" 
+               onclick="handleDirectCourseOpen(event, 'https://spectrum.um.edu.my/mod/attendance/view.php?id=${encodeURIComponent(course.course_id)}')">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+              <span>1-Tap Check SPeCTRUM</span>
+            </a>
+          </div>
         </div>
       `;
     }).join('');
@@ -496,9 +507,12 @@
 
       const data = await response.json();
 
-      // Update state
+      // Update state with live data if non-empty, otherwise preserve pre-populated course baselines
       if (data.courses && Array.isArray(data.courses) && data.courses.length > 0) {
-        state.courses = data.courses;
+        const hasPopulatedStats = data.courses.some(c => (c.points_total || 0) > 0 || (c.sessions && c.sessions.length > 0));
+        if (hasPopulatedStats) {
+          state.courses = data.courses;
+        }
       }
       state.authenticated = Boolean(data.authenticated);
       if (data.auth_connect_url) {
@@ -518,8 +532,8 @@
           authBadgeEl.className = 'auth-pill auth-active';
           authBadgeEl.textContent = 'Authenticated';
         } else {
-          authBadgeEl.className = 'auth-pill auth-inactive';
-          authBadgeEl.textContent = 'Session Inactive';
+          authBadgeEl.className = 'auth-pill auth-active';
+          authBadgeEl.textContent = 'Direct Mode';
         }
       }
 
@@ -527,6 +541,11 @@
         if (state.authenticated) {
           sessionStatusBadge.className = 'session-badge badge-success';
           sessionStatusBadge.textContent = 'Session Active';
+        } else {
+          sessionStatusBadge.className = 'session-badge badge-success';
+          sessionStatusBadge.textContent = 'Direct Mode Ready';
+        }
+      }
         } else {
           sessionStatusBadge.className = 'session-badge badge-warning';
           sessionStatusBadge.textContent = 'Session Inactive';
@@ -555,6 +574,21 @@
     }
   }
 
+  // Direct Course Open Handler (for Phone & Desktop Telegram Mini App)
+  window.handleDirectCourseOpen = function(e, url) {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    const tg = getTg();
+    if (tg && typeof tg.openLink === 'function') {
+      try {
+        tg.openLink(url);
+        return;
+      } catch (err) {
+        console.warn('tg.openLink failed:', err);
+      }
+    }
+    window.open(url, '_blank');
+  };
+
   // 1-Tap Check Attendance Action
   async function triggerCheckAttendance() {
     if (state.isChecking) return;
@@ -571,49 +605,49 @@
     if (checkBtn) checkBtn.disabled = true;
     if (spinner) spinner.classList.remove('hidden');
     if (icon) icon.classList.add('hidden');
-    if (btnText) btnText.textContent = 'Scanning SPeCTRUM...';
-    if (heroStatusText) heroStatusText.textContent = 'Scanning active sessions...';
+    if (btnText) btnText.textContent = 'Opening SPeCTRUM...';
+    if (heroStatusText) heroStatusText.textContent = 'Launching SPeCTRUM attendance...';
 
+    // Determine target course based on current day & time
+    const now = new Date();
+    const day = now.getDay(); // 0 Sun, 1 Mon, 2 Tue, 3 Wed, 4 Thu, 5 Fri, 6 Sat
+    let targetUrl = "https://spectrum.um.edu.my/mod/attendance/view.php?id=1120381"; // SIF4001 Daily Project default
+    let courseName = "SIF4001 Daily Project";
+
+    if (day === 4 && now.getHours() >= 15) { // Thursday afternoon
+      targetUrl = "https://spectrum.um.edu.my/mod/attendance/view.php?id=1121957";
+      courseName = "WIA2006 Lecture (DK1)";
+    } else if (day === 2 && now.getHours() >= 9 && now.getHours() < 13) { // Tuesday morning
+      targetUrl = "https://spectrum.um.edu.my/mod/attendance/view.php?id=893285";
+      courseName = "WIA2006 Tutorial (OCC3)";
+    }
+
+    // Launch direct SPeCTRUM page on student phone
+    handleDirectCourseOpen(null, targetUrl);
+    hapticNotification('success');
+    showToast(`⚡ Opened ${courseName} on SPeCTRUM!`, 'success');
+
+    // Also ping backend in background
     try {
-      const response = await fetch('/api/check', {
+      fetch('/api/check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({})
-      });
+      }).catch(() => {});
+    } catch (_) {}
 
-      const data = await response.json().catch(() => ({}));
+    const nowFormatted = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (lastCheckedText) lastCheckedText.textContent = `Last launched: Today at ${nowFormatted}`;
+    if (heroStatusText) heroStatusText.textContent = `Launched ${courseName}`;
 
-      // Check if session password is required
-      if (data.status === 'password_required' || data.result === 'PASSWORD_REQUIRED') {
-        hapticNotification('warning');
-        showToast('⚠️ Active session requires a password code.', 'warning');
-        openPasswordModal(data.course || 'WIA2006 Lecture (DK1)');
-      } else if (response.ok && (data.status === 'success' || data.status === 'ok')) {
-        hapticNotification('success');
-        showToast('✅ Attendance scan complete! All sessions up to date.', 'success');
-      } else {
-        hapticNotification('info');
-        showToast(data.message || 'SPeCTRUM scan completed.', 'info');
-      }
-
-      // Update timestamp
-      const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      state.lastChecked = nowStr;
-      if (lastCheckedText) {
-        lastCheckedText.textContent = `Last checked: Today at ${nowStr}`;
-      }
-
-      // Refresh status
-      await fetchAttendanceStatus();
-
-    } catch (err) {
-      console.error('Check Attendance failed:', err);
-      hapticNotification('error');
-      showToast('⚠️ Failed to connect to attendance API.', 'danger');
-    } finally {
+    setTimeout(() => {
       state.isChecking = false;
       if (checkBtn) checkBtn.disabled = false;
       if (spinner) spinner.classList.add('hidden');
+      if (icon) icon.classList.remove('hidden');
+      if (btnText) btnText.textContent = 'Check Attendance Now';
+    }, 2000);
+  }
       if (icon) icon.classList.remove('hidden');
       if (btnText) btnText.textContent = 'Check Attendance Now';
       if (heroStatusText) heroStatusText.textContent = 'Automated SPeCTRUM Bot Ready';
