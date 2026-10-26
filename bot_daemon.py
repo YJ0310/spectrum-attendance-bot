@@ -196,23 +196,54 @@ def run_telegram_listener():
 
 async def run_async_class_watcher(stop_event: asyncio.Event):
     """
-    Autonomous async background task checking class attendance during scheduled hours.
+    Autonomous async background task:
+      1. Sends proactive push notifications with 1-tap inline action buttons 5-10 mins before class.
+      2. Scrapes and submits attendance during active scheduled class hours.
     Cooperative shutdown via stop_event.
     """
     attendance.log("⏰ Async class-time watcher started.")
+    sent_reminders = set()  # Deduplicate daily reminders: (YYYY-MM-DD, course_name)
+
     while not stop_event.is_set():
         try:
             cfg = attendance.load_config()
             now = datetime.now()
+            today_str = now.strftime("%Y-%m-%d")
             current_weekday = now.strftime("%a")
             current_hour = now.hour
+            current_minute = now.minute
 
             for course in cfg.get("courses", []):
+                c_name = course.get("name", "")
+                c_url = course.get("url", "")
                 for sched in course.get("schedule", []):
                     s_day = str(sched.get("day", "")).lower()
                     s_hour = int(sched.get("hour", -1))
-                    if s_day.startswith(current_weekday.lower()[:3]) and current_hour in (s_hour, s_hour + 1):
-                        attendance.log(f"⏰ Active class window for {course.get('name')}. Checking attendance...")
+                    s_min = int(sched.get("minute", 0))
+
+                    if not s_day.startswith(current_weekday.lower()[:3]):
+                        continue
+
+                    # Pre-class proactive reminder calculation (within 10 mins before start)
+                    class_time_mins = s_hour * 60 + s_min
+                    now_mins = current_hour * 60 + current_minute
+                    diff_mins = class_time_mins - now_mins
+
+                    reminder_key = (today_str, c_name)
+                    if 0 < diff_mins <= 10 and reminder_key not in sent_reminders:
+                        attendance.log(f"🔔 Triggering {diff_mins}m pre-class push reminder for {c_name}...")
+                        sent = telegram_bot.send_attendance_reminder(
+                            course_name=c_name,
+                            course_url=c_url,
+                            minutes_before=diff_mins,
+                        )
+                        if sent:
+                            sent_reminders.add(reminder_key)
+                            attendance.log(f"✅ Telegram push reminder delivered for {c_name}")
+
+                    # Active class attendance submission window
+                    if current_hour in (s_hour, s_hour + 1):
+                        attendance.log(f"⏰ Active class window for {c_name}. Checking attendance...")
                         await asyncio.to_thread(attendance.check_and_submit_course, course)
         except asyncio.CancelledError:
             break

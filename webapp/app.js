@@ -251,6 +251,33 @@
   }
 
   // --------------------------------------------------------------------------
+  // Local Today Check-in Tracking
+  // --------------------------------------------------------------------------
+  function getTodayDateKey() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  function markCourseCheckedToday(courseId) {
+    if (!courseId) return;
+    try {
+      const key = `spectrum_checked_${courseId}_${getTodayDateKey()}`;
+      localStorage.setItem(key, new Date().toISOString());
+    } catch (_) {}
+    renderCourseCards();
+  }
+
+  function isCourseCheckedToday(courseId) {
+    if (!courseId) return false;
+    try {
+      const key = `spectrum_checked_${courseId}_${getTodayDateKey()}`;
+      return Boolean(localStorage.getItem(key));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // --------------------------------------------------------------------------
   // Course Attendance Cards Rendering
   // --------------------------------------------------------------------------
   function renderCourseCards() {
@@ -280,19 +307,25 @@
       const pointsAchieved = course.points_achieved ?? course.points_earned ?? 0;
       const pointsTotal = course.points_total ?? 0;
       const takenSessions = course.taken_sessions ?? (course.sessions ? course.sessions.length : 0);
+      const checkedToday = isCourseCheckedToday(course.course_id);
 
-      const statusBadgeHtml = isBelowThreshold
-        ? `<span class="threshold-badge danger-badge" title="Universiti Malaya 80% Exam Barring Threshold">
-             <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-             &lt;80% Exam Barring Risk
-           </span>`
-        : `<span class="threshold-badge safe-badge" title="Attendance in Good Standing">
+      const statusBadgeHtml = checkedToday
+        ? `<span class="threshold-badge checked-today-badge" title="Attendance recorded for today's session">
              <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg>
-             &gt;=80% Safe Standing
-           </span>`;
+             Checked In Today
+           </span>`
+        : (isBelowThreshold
+          ? `<span class="threshold-badge danger-badge" title="Universiti Malaya 80% Exam Barring Threshold">
+               <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+               &lt;80% Exam Barring Risk
+             </span>`
+          : `<span class="threshold-badge safe-badge" title="Attendance in Good Standing">
+               <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg>
+               &gt;=80% Safe Standing
+             </span>`);
 
       return `
-        <div class="course-card ${isBelowThreshold ? 'below-threshold' : 'safe-threshold'}" data-course-id="${escapeHtml(course.course_id || '')}">
+        <div class="course-card ${isBelowThreshold && !checkedToday ? 'below-threshold' : 'safe-threshold'}" data-course-id="${escapeHtml(course.course_id || '')}">
           <div class="course-card-top">
             <div class="course-meta">
               <div class="course-code-row">
@@ -305,7 +338,7 @@
               <h3 class="course-name">${escapeHtml(course.course_name)}</h3>
             </div>
             <div class="course-rate-box">
-              <span class="rate-percentage ${isBelowThreshold ? 'danger' : 'safe'}">${rateFormatted}</span>
+              <span class="rate-percentage ${isBelowThreshold && !checkedToday ? 'danger' : 'safe'}">${rateFormatted}</span>
               ${statusBadgeHtml}
             </div>
           </div>
@@ -314,7 +347,7 @@
           <div class="progress-container">
             <div class="progress-track" title="Attendance Progress: ${rateFormatted}">
               <div class="progress-marker-80" title="80% Minimum Requirement Marker"></div>
-              <div class="progress-bar ${isBelowThreshold ? 'danger' : 'safe'}" style="width: ${Math.min(100, Math.max(0, rate))}%"></div>
+              <div class="progress-bar ${isBelowThreshold && !checkedToday ? 'danger' : 'safe'}" style="width: ${Math.min(100, Math.max(0, rate))}%"></div>
             </div>
           </div>
 
@@ -325,8 +358,8 @@
               <span class="stat-value">${pointsAchieved} / ${pointsTotal}</span>
             </div>
             <div class="footer-stat">
-              <span>Recorded Sessions:</span>
-              <span class="stat-value">${takenSessions}</span>
+              <span>${checkedToday ? "Today's Status:" : "Recorded Sessions:"}</span>
+              <span class="stat-value ${checkedToday ? 'text-success font-semibold' : ''}">${checkedToday ? "Present ✓" : takenSessions}</span>
             </div>
           </div>
 
@@ -334,10 +367,10 @@
           <div class="course-card-actions">
             <a href="https://spectrum.um.edu.my/mod/attendance/view.php?id=${encodeURIComponent(course.course_id)}" 
                target="_blank" 
-               class="btn-open-course" 
-               onclick="handleDirectCourseOpen(event, 'https://spectrum.um.edu.my/mod/attendance/view.php?id=${encodeURIComponent(course.course_id)}')">
+               class="btn-open-course ${checkedToday ? 'btn-recheck' : ''}" 
+               onclick="handleDirectCourseOpen(event, 'https://spectrum.um.edu.my/mod/attendance/view.php?id=${encodeURIComponent(course.course_id)}', '${escapeHtml(course.course_id)}')">
               <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-              <span>1-Tap Check SPeCTRUM</span>
+              <span>${checkedToday ? 'Re-check SPeCTRUM' : '1-Tap Check SPeCTRUM'}</span>
             </a>
           </div>
         </div>
@@ -570,8 +603,11 @@
   }
 
   // Direct Course Open Handler (for Phone & Desktop Telegram Mini App)
-  window.handleDirectCourseOpen = function(e, url) {
+  window.handleDirectCourseOpen = function(e, url, courseId) {
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    if (courseId) {
+      markCourseCheckedToday(courseId);
+    }
     const tg = getTg();
     if (tg && typeof tg.openLink === 'function') {
       try {
@@ -608,17 +644,20 @@
     const day = now.getDay(); // 0 Sun, 1 Mon, 2 Tue, 3 Wed, 4 Thu, 5 Fri, 6 Sat
     let targetUrl = "https://spectrum.um.edu.my/mod/attendance/view.php?id=1120381"; // SIF4001 Daily Project default
     let courseName = "SIF4001 Daily Project";
+    let targetCourseId = "1120381";
 
     if (day === 4 && now.getHours() >= 15) { // Thursday afternoon
       targetUrl = "https://spectrum.um.edu.my/mod/attendance/view.php?id=1121957";
       courseName = "WIA2006 Lecture (DK1)";
+      targetCourseId = "1121957";
     } else if (day === 2 && now.getHours() >= 9 && now.getHours() < 13) { // Tuesday morning
       targetUrl = "https://spectrum.um.edu.my/mod/attendance/view.php?id=893285";
       courseName = "WIA2006 Tutorial (OCC3)";
+      targetCourseId = "893285";
     }
 
     // Launch direct SPeCTRUM page on student phone
-    handleDirectCourseOpen(null, targetUrl);
+    handleDirectCourseOpen(null, targetUrl, targetCourseId);
     hapticNotification('success');
     showToast(`⚡ Opened ${courseName} on SPeCTRUM!`, 'success');
 

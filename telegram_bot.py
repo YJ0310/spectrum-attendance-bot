@@ -34,10 +34,17 @@ def is_configured() -> bool:
     return bool(token and chat_id)
 
 
-def send_message(text: str, chat_id: str = None, token: str = None, parse_mode: str = "HTML") -> bool:
+def send_message(
+    text: str,
+    chat_id: str = None,
+    token: str = None,
+    parse_mode: str = "HTML",
+    reply_markup: Optional[dict] = None,
+) -> bool:
     """
     Sends a message via Telegram Bot API.
     Defaults to HTML parse mode for robust formatting without markdown escaping issues.
+    Optionally accepts reply_markup (e.g. InlineKeyboardMarkup) for interactive buttons.
     """
     bot_token, default_chat_id = get_credentials()
     tok = token or bot_token
@@ -53,6 +60,8 @@ def send_message(text: str, chat_id: str = None, token: str = None, parse_mode: 
         "parse_mode": parse_mode,
         "disable_web_page_preview": True,
     }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
 
     try:
         resp = requests.post(url, json=payload, timeout=15)
@@ -68,6 +77,36 @@ def send_message(text: str, chat_id: str = None, token: str = None, parse_mode: 
     except Exception as e:
         print(f"[Telegram] Error sending message: {e}")
         return False
+
+
+def send_attendance_reminder(
+    course_name: str,
+    course_url: str,
+    minutes_before: int = 5,
+    chat_id: Optional[str] = None,
+) -> bool:
+    """
+    Sends an interactive class attendance reminder with 1-tap inline action buttons.
+    Allows user to tap directly and open SPeCTRUM on their phone via domestic/campus connection.
+    """
+    app_url = os.environ.get("WEBAPP_URL") or "https://spectrum-attendance-bot.onrender.com/app"
+    text = (
+        f"⏰ <b>SPeCTRUM Attendance Reminder</b>\n\n"
+        f"📚 <b>Course:</b> {course_name}\n"
+        f"⏳ Class starts in <b>{minutes_before} minutes</b>!\n\n"
+        f"👉 Tap the button below to submit your attendance now:"
+    )
+    reply_markup = {
+        "inline_keyboard": [
+            [
+                {"text": "⚡ 1-Tap Submit Attendance", "url": course_url}
+            ],
+            [
+                {"text": "📊 Open SPeCTRUM Mini App", "web_app": {"url": app_url}}
+            ]
+        ]
+    }
+    return send_message(text, chat_id=chat_id, reply_markup=reply_markup)
 
 
 def set_chat_menu_button(

@@ -19,7 +19,7 @@ import subprocess
 import sys
 import time
 from datetime import datetime, timezone
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, parse_qs
 
 import requests
 from bs4 import BeautifulSoup
@@ -633,6 +633,19 @@ def submit_attendance_form(
         elif inp_type == "submit" and name == "submitbutton":
             payload[name] = inp.get("value", "Save changes")
 
+    # Extract sessid and sesskey from query parameters if omitted from form body
+    parsed_submit = urlparse(submit_url)
+    qs_data = parse_qs(parsed_submit.query)
+    if "sessid" in qs_data and "sessid" not in payload:
+        payload["sessid"] = qs_data["sessid"][0]
+    if "sesskey" in qs_data and "sesskey" not in payload:
+        payload["sesskey"] = qs_data["sesskey"][0]
+
+    # Ensure standard Moodle 4.x QuickForm attendance markers are present
+    if "_qf__mod_attendance_form_studentattendance" not in payload:
+        payload["_qf__mod_attendance_form_studentattendance"] = "1"
+    if "mform_isexpanded_id_session" not in payload:
+        payload["mform_isexpanded_id_session"] = "1"
     if "submitbutton" not in payload:
         payload["submitbutton"] = "Save changes"
 
@@ -1093,6 +1106,33 @@ def authenticate_sso(
             "message": "Authentication failed. Could not obtain SPeCTRUM session cookies.",
             "requires_mfa": False,
         }
+
+
+def fetch_upcoming_calendar_events(session: requests.Session, sesskey: str, courseid: str = "1") -> list[dict]:
+    """
+    Queries Moodle's built-in core_calendar_get_calendar_upcoming_view JSON-RPC
+    web service to discover upcoming sessions and calendar events directly.
+    """
+    url = normalize_spectrum_url(
+        f"https://spectrum.um.edu.my/lib/ajax/service.php?sesskey={sesskey}&info=core_calendar_get_calendar_upcoming_view"
+    )
+    payload = [{
+        "index": 0,
+        "methodname": "core_calendar_get_calendar_upcoming_view",
+        "args": {
+            "courseid": str(courseid),
+            "categoryid": "0"
+        }
+    }]
+    try:
+        resp = session.post(url, json=payload, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, list) and len(data) > 0 and not data[0].get("error", False):
+                return data[0].get("data", {}).get("events", [])
+    except Exception as e:
+        log(f"⚠️ Calendar upcoming view fetch error: {e}")
+    return []
 
 
 def main():
